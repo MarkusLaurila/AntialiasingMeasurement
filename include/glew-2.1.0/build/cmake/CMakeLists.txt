@@ -5,7 +5,6 @@ endif ()
 project (glew)
 
 cmake_minimum_required (VERSION 2.8.12)
-
 include(GNUInstallDirs)
 
 if (COMMAND cmake_policy)
@@ -93,6 +92,7 @@ if (WIN32)
 endif ()
 
 add_library (glew SHARED ${GLEW_PUBLIC_HEADERS_FILES} ${GLEW_SRC_FILES})
+
 set_target_properties (glew PROPERTIES COMPILE_DEFINITIONS "GLEW_BUILD" OUTPUT_NAME "${GLEW_LIB_NAME}" PREFIX "${DLL_PREFIX}"
                                        VERSION ${GLEW_VERSION}
                                        SOVERSION ${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR})

@@ -1,18 +1,17 @@
 #pragma once
-#ifndef IMAGECAPTURE_H
-#define IMAGECAPTURE_H
-#include <glew.h>
-#include <GLFW/glfw3.h>
+
+
 #include <vector>
-#include <iostream>
-#include <fstream>
-#include <inc/SOIL/SOIL.h>
+class ImageCapture {
+public:
+   ImageCapture();
+    ~ImageCapture();
+    static void saveScreenShot(int width, int height, const char *filename);
+    static void saveGreyImage(int width, int height,const std::vector <unsigned char> & gray, const char *filename);
 
-void saveScreenShot(int width, int height, const char *filename);
+};
 
 
 
 
 
-
-#endif //IMAGECAPTURE_H
