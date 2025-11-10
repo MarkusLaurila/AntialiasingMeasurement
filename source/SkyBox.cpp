@@ -1,9 +1,10 @@
 #include "SkyBox.h"
-#include <SOIL/SOIL.h>
+#define STB_IMAGE_IMPLEMENTATION
 #include <gtc/type_ptr.hpp>
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <include/stb-master/stb_image.h>
 static const float skyBoxVertices[] = {
 
     -1.0f,  1.0f, -1.0f,
@@ -98,19 +99,20 @@ GLuint Skybox::loadCubeMap(const std::vector<std::string>& faces) {
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
 
+    stbi_set_flip_vertically_on_load(false);
+
     for (GLuint i = 0; i < faces.size(); ++i) {
-        int width, height;
-        unsigned char* data = SOIL_load_image(faces[i].c_str(), &width, &height, 0, SOIL_LOAD_RGB);
+        int width, height, channels;
+        unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &channels, 3);
         if (data) {
             glTexImage2D(
                 GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
                 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data
             );
-            SOIL_free_image_data(data);
+            stbi_image_free(data);
         } else {
-            std::cerr << "SOIL failed to load cubemap texture at path: " << faces[i] << std::endl;
+            std::cerr << "Failed to load cubemap texture at path: " << faces[i] << std::endl;
         }
-
     }
 
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

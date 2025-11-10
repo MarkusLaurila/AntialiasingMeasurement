@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
+#include "TextureManager.h"
 #include "Shader.h"
 #include "Display.h"
 #include "OverLay.h"
@@ -101,8 +102,12 @@ vector<string> faces
         glfwSetKeyCallback(window, key_callback);
         glfwSetCursorPosCallback(window, mouse_callback);
         ModelImporter model_importer;
-
-        if (model_importer.loadModel("../include/assimp/test/models/BLEND/box.blend")) {
+        //OpenGL init check
+        GLenum err;
+        while ((err = glGetError()) != GL_NO_ERROR) {
+            std::cout << "OpenGL Error: " << err << std::endl;
+        }
+        if (model_importer.loadModel("../resources/models/TowerIsland.fbx")) {
 
             std::cout << "Model loaded successfully."  << std::endl;
 
@@ -113,15 +118,10 @@ vector<string> faces
             return 0;
         }
         const auto& meshes = model_importer.getMeshes();
+
+
         SHADER sceneShader ("../shader/shader.vert", "../shader/shader.frag");
         SHADER aaShader ("../shader/screenQuad.vert", "../shader/shaderAntiAliasing.frag");
-
-
-
-        GLenum err;
-        while ((err = glGetError()) != GL_NO_ERROR) {
-            std::cout << "OpenGL Error: " << err << std::endl;
-        }
 
         GLuint fbo, fboTexture, rbo, historyTexture;
         glGenFramebuffers(1, &fbo);
@@ -211,40 +211,69 @@ vector<string> faces
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
             sceneShader.UseShader();
-            //Scale for model
-            glm::mat4 model = glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+            vec3 lightDir = normalize(vec3(-0.5f, -1.0f, -0.3f));
+            vec3 lightColor = vec3(1.0f, 1.0f, 1.0f);
 
-            glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+            glUniform3fv(glGetUniformLocation(sceneShader.program, "lightDir"), 1, value_ptr(lightDir));
+            glUniform3fv(glGetUniformLocation(sceneShader.program, "lightColor"), 1, value_ptr(lightColor));
+            //Scale for model
+            mat4 model = scale(mat4(0.4f), vec3(0.1f));
+            model = rotate(model,radians(90.0f), vec3(-1.0f, 0.0f, 0.0f));
+
+
+            mat4 view = lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
 
             float jitterX = Halton((frameIndex % 8) + 1, 2) - 0.5f;
             float jitterY = Halton((frameIndex % 8) + 1, 3) - 0.5f;
 
-            glm::vec2 jitter(jitterX , jitterY );
-            glm::vec2 jitterUV = jitter / glm::vec2(oldWidth, oldHeight);
+            vec2 jitter(jitterX , jitterY );
+            vec2 jitterUV = jitter / vec2(oldWidth, oldHeight);
 
             frameIndex++;
-            glm::mat4 projection = glm::perspective(radians(45.0f), (float)oldWidth / (float)oldHeight, 0.1f, 100.0f);
+            mat4 projection = perspective(radians(45.0f), (float)oldWidth / (float)oldHeight, 0.1f, 100.0f);
             if (currentAA == 4) {
                 projection[2][0] += jitterUV.x* 2.0f;
                 projection[2][1] += jitterUV.y* 2.0f;
             }
-            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "view"), 1, GL_FALSE, glm::value_ptr(view));
-            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "view"), 1, GL_FALSE, value_ptr(view));
+            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "projection"), 1, GL_FALSE, value_ptr(projection));
+            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "model"), 1, GL_FALSE, value_ptr(model));
+
             glBindVertexArray(0);
 
             glBindFramebuffer(GL_FRAMEBUFFER, fbo);
             glEnable(GL_DEPTH_TEST);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // Render your scene normally
+
             for (const auto& mesh : meshes) {
+                if (mesh.materialTextures.baseColorID != 0) {
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.baseColorID);
+                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.diffuse"), 0);
+                }
+                if (mesh.materialTextures.normalID != 0) {
+                    glActiveTexture(GL_TEXTURE1);
+                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.normalID);
+                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.normal"), 1);
+                }
+                if (mesh.materialTextures.roughnessID != 0) {
+                    glActiveTexture(GL_TEXTURE2);
+                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.roughnessID);
+                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.roughness"), 2);
+                }
+                if (mesh.materialTextures.aoID != 0) {
+                    glActiveTexture(GL_TEXTURE3);
+                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.aoID);
+                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.ao"), 3);
+                }
                 mesh.Draw();
             }
 
 
              glDepthFunc(GL_LEQUAL);
              glDepthMask(GL_FALSE);
-             skybox.Draw(view, projection); //SKybox draw
+             skybox.Draw(view, projection);
              glDepthMask(GL_TRUE);
              glDepthFunc(GL_LESS);
 
@@ -427,6 +456,7 @@ vector<string> faces
         glDeleteRenderbuffers(1, &rbo);
         glDeleteFramebuffers(1, &taaFBO);
         glDeleteTextures(1, &taaTexture);
+        TextureManager::Clear();
         overlay.shutDownGUI();
         glfwTerminate();
         return 1;

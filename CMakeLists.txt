@@ -13,6 +13,7 @@ find_package(OpenGL REQUIRED)
 set(ASSIMP_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ALL_IMPORTERS_BY_DEFAULT OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_BLEND_IMPORTER ON CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_FBX_IMPORTER ON CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
@@ -24,7 +25,7 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libs" FORCE)
 add_subdirectory(include/glfw-3.4)
 add_subdirectory(include/glew-2.1.0/build/cmake)
 add_subdirectory(include/glm)
-add_subdirectory(include/soil-master)
+
 add_subdirectory(include/imgui-1.91.9b)
 add_executable(antialiasing
         source/main.cpp
@@ -42,13 +43,14 @@ add_executable(antialiasing
         source/CornerDetector.cpp
         source/ModelImporter.cpp
         header/ModelImporter.h
+        source/TextureManager.cpp
+        header/TextureManager.h
 )
 target_include_directories(antialiasing PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/header
         ${CMAKE_CURRENT_SOURCE_DIR}/include/glm
         ${CMAKE_CURRENT_SOURCE_DIR}/include/glfw-3.4/include
         ${CMAKE_CURRENT_SOURCE_DIR}/include/glew-2.1.0/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/soil-master/inc
         ${CMAKE_CURRENT_SOURCE_DIR}/include/imgui-1.91.9b
         ${CMAKE_CURRENT_SOURCE_DIR}/include/imgui-1.91.9b/backends
         ${FFTW_INCLUDE_DIR}
@@ -60,7 +62,6 @@ target_link_libraries(antialiasing PRIVATE
         glfw
         glew_s
         glm
-        soil
         imgui
         OpenGL::GL
         assimp::assimp

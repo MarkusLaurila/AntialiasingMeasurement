@@ -4,26 +4,25 @@
 #include <string>
 #include <include/glm/glm.hpp>
 #include <GL/glew.h>
+#include "TextureManager.h"
 
-
-// Vertex structure
 struct Vertex {
     glm::vec3 Position;
     glm::vec3 Normal;
     glm::vec2 TexCoords;
 };
 
-// Mesh structure
 struct Mesh {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
     GLuint VAO, VBO, EBO;
+    size_t indexCount;
+    MaterialTextures materialTextures;
 
     void setupMesh();
     void Draw() const;
 };
 
-// Model Importer class
 class ModelImporter {
 public:
     ModelImporter() = default;
@@ -38,4 +37,3 @@ private:
     void processNode(class aiNode* node, const class aiScene* scene);
     Mesh processMesh(class aiMesh* mesh, const class aiScene* scene);
 };
-

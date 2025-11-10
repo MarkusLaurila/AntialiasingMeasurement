@@ -1,18 +1,20 @@
 #include "ImageCapture.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <iostream>
 #include <fstream>
-#include <SOIL/SOIL.h>
 #include <GL/glew.h>
-
+#include <include/stb-master/stb_image_write.h>
 
 ImageCapture::ImageCapture() = default;
 
 ImageCapture::~ImageCapture() = default;
 
-void ImageCapture::saveScreenShot(int width, int height, const char *filename) {
-    std::vector<unsigned char> pixels(width*height*3);
+void ImageCapture::saveScreenShot(int width, int height, const char* filename) {
+    std::vector<unsigned char> pixels(width * height * 3);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+
     std::vector<unsigned char> flipped(pixels.size());
     for (int y = 0; y < height; ++y) {
         std::copy(
@@ -22,32 +24,29 @@ void ImageCapture::saveScreenShot(int width, int height, const char *filename) {
         );
     }
 
-    int result = SOIL_save_image(filename,SOIL_SAVE_TYPE_TGA, width, height, 3, flipped.data());
-    if (result == 0) {
-        std::cerr << "SOIL failed to save screenshot: " << SOIL_last_result() << std::endl;
-    } else {
+
+    if (stbi_write_png(filename, width, height, 3, flipped.data(),0)) {
         std::cout << "Screenshot saved to " << filename << std::endl;
+    } else {
+        std::cerr << "Failed to save screenshot: " << filename << std::endl;
     }
 }
 
-void ImageCapture::saveGreyImage(int width, int height,const std::vector <unsigned char> & gray, const char *filename) {
+void ImageCapture::saveGreyImage(int width, int height, const std::vector<unsigned char>& gray, const char* filename) {
     std::vector<unsigned char> flipped_vector(gray.size());
-
     for (int y = 0; y < height; ++y) {
         std::copy(
             gray.begin() + y * width,
             gray.begin() + (y + 1) * width,
             flipped_vector.begin() + (height - 1 - y) * width
-            );
-    }
-    int result = SOIL_save_image(filename, SOIL_SAVE_TYPE_TGA, width, height, 1, flipped_vector.data());
-    if (result == 0) {
-        std::cerr << "SOIL failed to save GrayImage screenshot: " << SOIL_last_result() << std::endl;
-    }
-    else {
-        std::cout << "GrayImage saved to " << filename << std::endl;
+        );
     }
 
+    if (stbi_write_png(filename, width, height, 1, flipped_vector.data(),0)) {
+        std::cout << "GrayImage saved to " << filename << std::endl;
+    } else {
+        std::cerr << "Failed to save GrayImage: " << filename << std::endl;
+    }
 }
 
 
