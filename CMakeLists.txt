@@ -45,8 +45,8 @@ add_executable(antialiasing
         header/ModelImporter.h
         source/TextureManager.cpp
         header/TextureManager.h
-        source/ShadowMap.cpp
-        header/ShadowMap.h
+       # source/ShadowMap.cpp
+       # header/ShadowMap.h
 )
 target_include_directories(antialiasing PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/header
