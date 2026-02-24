@@ -295,21 +295,98 @@ std::vector<float> CornerDetector::getPowerSpectralDensityDescriptor(const unsig
     return computePowerSpectralDensity(magSpec);
 }
 
-std::vector<unsigned char> CornerDetector::sobelVisualizer(const unsigned char *grayImage, int width, int height,
-    float threshold, bool overLayOriginal) {
-    auto corners = ApplySobel(grayImage,width,height,threshold);
-    std::vector<unsigned char> result(
-        grayImage,
-        grayImage + width * height
-        );
-    if (overLayOriginal) {
-        std::fill(result.begin(), result.end(), 0);
-    }
-    for (const auto& c: corners) {
-        int x = c.first;
-        int y = c.second;
-        result[y * width + x] = 255;
-    }
-    return result;
+std::vector<unsigned char> CornerDetector::sobelVisualizerRGB(
+    const unsigned char* grayImage,
+    int width,
+    int height,
+    float threshold,
+    bool overlayCorners)
+{
+    std::vector<unsigned char> output(width * height * 3);
 
+    const int gx[3][3] = {
+        {-1, 0, 1},
+        {-2, 0, 2},
+        {-1, 0, 1}
+    };
+    const int gy[3][3] = {
+        {-1, -2, -1},
+        { 0,  0,  0},
+        { 1,  2,  1}
+    };
+
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+
+            int sx = 0, sy = 0;
+
+            for (int j = -1; j <= 1; j++) {
+                for (int i = -1; i <= 1; i++) {
+
+                    unsigned char p = grayImage[(y + j) * width + (x + i)];
+
+                    sx += p * gx[j + 1][i + 1];
+                    sy += p * gy[j + 1][i + 1];
+                }
+            }
+
+            float mag = std::sqrt(float(sx * sx + sy * sy));
+            mag = std::min(255.0f, mag);
+
+            int idx = (y * width + x) * 3;
+
+            output[idx + 0] = (unsigned char)std::min(255, std::abs(sx));
+            output[idx + 1] = (unsigned char)std::min(255, std::abs(sy));
+            output[idx + 2] = (unsigned char)mag;
+        }
+    }
+    if (overlayCorners) {
+        auto corners = ApplySobel(grayImage, width, height, threshold);
+        for (auto& c : corners) {
+            int idx = (c.second * width + c.first) * 3;
+            output[idx + 0] = 255;
+            output[idx + 1] = 0;
+            output[idx + 2] = 0;
+        }
+    }
+
+    return output;
 }
+std::vector<unsigned char> CornerDetector::sobelVisualizerGrey(
+    const unsigned char* grayImage, int width, int height, float threshold, bool overlayOriginal)
+{
+    std::vector<unsigned char> result(grayImage, grayImage + width * height);
+
+    int gx[3][3] = {{-1,0,1},{-2,0,2},{-1,0,1}};
+    int gy[3][3] = {{-1,-2,-1},{0,0,0},{1,2,1}};
+
+    for (int y = 1; y < height-1; ++y) {
+        for (int x = 1; x < width-1; ++x) {
+            int sx = 0, sy = 0;
+
+            for (int ky = -1; ky <= 1; ++ky) {
+                for (int kx = -1; kx <= 1; ++kx) {
+                    int pixel = grayImage[(y + ky) * width + (x + kx)];
+                    sx += gx[ky+1][kx+1] * pixel;
+                    sy += gy[ky+1][kx+1] * pixel;
+                }
+            }
+
+            float mag = std::sqrt(float(sx*sx + sy*sy));
+            unsigned char value = static_cast<unsigned char>(std::min(255.0f, mag));
+
+            if (overlayOriginal) {
+                result[y * width + x] = std::max(grayImage[y * width + x], value);
+            } else {
+                result[y * width + x] = value;
+            }
+        }
+    }
+
+    return result;
+}
+
+
+
+
+

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(antialiasing)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 set(GLFW_BUILD_SHARED_LIBS OFF CACHE BOOL "GLFW static" FORCE)
 set(GLEW_BUILD_SHARED OFF CACHE BOOL "GLEW shared OFF" FORCE)
 set(GLEW_BUILD_STATIC ON CACHE BOOL "GLEW static ON" FORCE)
@@ -45,6 +45,8 @@ add_executable(antialiasing
         header/ModelImporter.h
         source/TextureManager.cpp
         header/TextureManager.h
+        source/ShadowMap.cpp
+        header/ShadowMap.h
 )
 target_include_directories(antialiasing PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/header

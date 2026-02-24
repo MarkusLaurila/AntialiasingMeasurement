@@ -18,6 +18,10 @@ class OverLay {
     float edgeSharpness = 0;
     float threshold = 200.0f;
     ImVec2 graphSize = ImVec2(0,80);
+    float peakFPS = 0.0f;
+    float lowestFPS = FLT_MAX;
+    float fpsSum = 0.0f;
+    int fpsFrames = 0;
 };
 
 

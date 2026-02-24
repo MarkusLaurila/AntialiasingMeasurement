@@ -33,20 +33,20 @@ void ImageCapture::saveScreenShot(int width, int height, const char* filename) {
 }
 
 void ImageCapture::saveGreyImage(int width, int height, const std::vector<unsigned char>& gray, const char* filename) {
-    std::vector<unsigned char> flipped_vector(gray.size());
-    for (int y = 0; y < height; ++y) {
-        std::copy(
-            gray.begin() + y * width,
-            gray.begin() + (y + 1) * width,
-            flipped_vector.begin() + (height - 1 - y) * width
-        );
-    }
-
-    if (stbi_write_png(filename, width, height, 1, flipped_vector.data(),0)) {
-        std::cout << "GrayImage saved to " << filename << std::endl;
+    if (stbi_write_png(filename, width, height, 1, gray.data(), width)) {
+        std::cout << "Gray image saved to " << filename << std::endl;
     } else {
-        std::cerr << "Failed to save GrayImage: " << filename << std::endl;
+        std::cerr << "Failed to save gray image: " << filename << std::endl;
     }
 }
+void ImageCapture::saveColorImage(int width, int height, const std::vector<unsigned char>& rgb, const char* filename) {
+    if (stbi_write_png(filename, width, height, 3, rgb.data(), width * 3)) {
+        std::cout << "Color image saved to " << filename << std::endl;
+    } else {
+        std::cerr << "Failed to save color image: " << filename << std::endl;
+    }
+}
+
+
 
 

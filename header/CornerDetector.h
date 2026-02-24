@@ -4,6 +4,7 @@
 #include <glm.hpp>
 #include <fftw3.h>
 #include <mutex>
+#define M_PI 3.14159265358979323846
 struct Point2D {
     int x, y;
 };
@@ -25,13 +26,20 @@ public:
     std::vector<float> getMagnitudeSpectrumDescriptor(const unsigned char* img);
     std::vector<float> getPhaseCorrelationDescriptor(const unsigned char* img);
     std::vector<float> getPowerSpectralDensityDescriptor(const unsigned char* img);
-    static std::vector<unsigned char> sobelVisualizer(
+    static std::vector<unsigned char> sobelVisualizerRGB(
         const unsigned char* grayImage,
         int width,
         int height,
         float threshold,
-        bool overLayOriginal = true
+        bool overLayOriginal = false
         );
+   static std::vector<unsigned char> sobelVisualizerGrey(
+    const unsigned char* grayImage,
+    int width,
+    int height,
+    float threshold,
+    bool overlayOriginal
+    );
     void setGrayImage(const unsigned char* grayImage, int w, int h);
     void captureSpectrumImage(std::vector<float>& spectrum, const char* filename);
 private:

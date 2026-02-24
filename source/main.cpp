@@ -16,6 +16,8 @@
 #include "SkyBox.h"
 #include "ModelImporter.h"
 #include <direct.h>
+
+#include "ShadowMap.h"
 using namespace std;
 using namespace glm;
 
@@ -31,21 +33,21 @@ float quadVertices[] = {
 };
 
 //Camera vectors
-vec3 cameraPos = vec3(0.0f, 0.0f, 3.0f);
-vec3 cameraFront = vec3(0.0f, 0.0f, -1.0f);
+vec3 cameraPos = vec3(-0.20565, 0.0814033, 0.290349);
+vec3 cameraFront = vec3(0.51059, -0.432871, -0.742914);
 vec3 cameraUp = vec3(0.0f, 1.0f, 0.0f);
 GLuint quadVAO = 0, quadVBO = 0;
 GLfloat deltaTime = 0.0f;
 GLfloat lastFrame = 0.0f;
 GLfloat  lastX = 400, lastY = 300;
-GLfloat yaw1 = -90.0f;
-GLfloat pitch1 = 0.0f;
+GLfloat yaw1 = -53.5996;
+GLfloat pitch1 = -34.3998;
 int newWidth, newHeight;
 int oldWidth=800, oldHeight=600;
 bool keys[1024];
 int currentAA = 0;
 int frameIndex = 0;
-
+float sun_Direction = 23.0f;
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 void mouse_callback(GLFWwindow* window, double xPos, double yPos);
 void scroll_callback(GLFWwindow* window, double xOffset, double yOffset);
@@ -56,7 +58,7 @@ void setupScreenQuad();
 void renderScreenQuad();
 bool detectCorners = false;
 bool fourierTransform = false;
-bool cursorEnabled = false;
+bool cursorEnabled = true;
 std::mutex overlayMutex;
 vector<string> faces
 
@@ -75,17 +77,14 @@ vector<string> faces
         char cwd[1024];
         _getcwd(cwd, sizeof(cwd));
         std::cout << "\nCurrent working directory: " << cwd << std::endl;
-
     DISPLAY display;
     OverLay overlay;
         display.createWindow(oldWidth,oldHeight);
         GLFWwindow* window = display.getWindow();
         Resize(window,oldWidth,oldHeight);
         overlay.initGUI(window);
-
         newWidth = oldWidth;
         newHeight = oldHeight;
-
         CornerDetector cornerDetector(newWidth,newHeight);
         glfwSwapInterval(0);
         glewExperimental = true;
@@ -97,7 +96,7 @@ vector<string> faces
         glEnable(GL_DEPTH_TEST);
         Skybox skybox(faces);
         ImGui_ImplGlfw_InitForOpenGL(window, true);
-        glfwSetInputMode(window,GLFW_CURSOR,GLFW_CURSOR_DISABLED);
+        glfwSetInputMode(window, GLFW_CURSOR, cursorEnabled ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
         glfwSetScrollCallback(window, scroll_callback);
         glfwSetKeyCallback(window, key_callback);
         glfwSetCursorPosCallback(window, mouse_callback);
@@ -107,6 +106,7 @@ vector<string> faces
         while ((err = glGetError()) != GL_NO_ERROR) {
             std::cout << "OpenGL Error: " << err << std::endl;
         }
+        TextureManager::LoadAllTextures();
         if (model_importer.loadModel("../resources/models/TowerIsland.fbx")) {
 
             std::cout << "Model loaded successfully."  << std::endl;
@@ -115,25 +115,31 @@ vector<string> faces
         else {
             std::cout << "Failed to load model" << std::endl;
             glfwTerminate();
-            return 0;
+            return -1;
         }
-        const auto& meshes = model_importer.getMeshes();
 
+        const auto& meshes = model_importer.getMeshes();
+        model_importer.centerAndScaleModel(1.0f);
+        glm::vec3 min(FLT_MAX), max(-FLT_MAX);
+        for (const auto& mesh : meshes) {
+            for (const auto& vertex : mesh.vertices) {
+                glm::vec4 pos = mesh.transform * glm::vec4(vertex.Position, 1.0f);
+                min = glm::min(min, glm::vec3(pos));
+                max = glm::max(max, glm::vec3(pos));
+            }
+        }
 
         SHADER sceneShader ("../shader/shader.vert", "../shader/shader.frag");
         SHADER aaShader ("../shader/screenQuad.vert", "../shader/shaderAntiAliasing.frag");
-
         GLuint fbo, fboTexture, rbo, historyTexture;
         glGenFramebuffers(1, &fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
         glGenTextures(1, &fboTexture);
         glBindTexture(GL_TEXTURE_2D, fboTexture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboTexture, 0);
-
         glGenTextures(1, &historyTexture);
         glBindTexture(GL_TEXTURE_2D, historyTexture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
@@ -142,35 +148,59 @@ vector<string> faces
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glBindTexture(GL_TEXTURE_2D, 0);
-
         glGenRenderbuffers(1, &rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, rbo);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, oldWidth, oldHeight);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
-
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
             cerr << "Framebuffer not complete!" << endl;
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
         GLuint taaFBO, taaTexture;
         glGenFramebuffers(1, &taaFBO);
         glBindFramebuffer(GL_FRAMEBUFFER, taaFBO);
-
         glGenTextures(1, &taaTexture);
         glBindTexture(GL_TEXTURE_2D, taaTexture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, taaTexture, 0);
-
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
             std::cerr << "TAA Framebuffer not complete!" << std::endl;
-
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         setupScreenQuad();
+        mat4 model = scale(mat4(1.0f), vec3(1.0f));
+        sceneShader.UseShader();
+        static int locHasDiffuse     = glGetUniformLocation(sceneShader.program, "material.hasDiffuse");
+        static int locHasNormal      = glGetUniformLocation(sceneShader.program, "material.hasNormal");
+        static int locHasRoughness   = glGetUniformLocation(sceneShader.program, "material.hasRoughness");
+        static int locHasAO          = glGetUniformLocation(sceneShader.program, "material.hasAO");
+        static int locHasMask        = glGetUniformLocation(sceneShader.program, "material.hasMask");
+        static int locHasMetallic    = glGetUniformLocation(sceneShader.program, "material.hasMetallic");
+        static int locHasDisplacement = glGetUniformLocation(sceneShader.program, "hasDisplacement");
+        static int locView        = glGetUniformLocation(sceneShader.program, "view");
+        static int locProjection  = glGetUniformLocation(sceneShader.program, "projection");
+        static int locModel       = glGetUniformLocation(sceneShader.program, "model");
+        static int locDiffuse     = glGetUniformLocation(sceneShader.program, "material.diffuse");
+        static int locNormal      = glGetUniformLocation(sceneShader.program, "material.normal");
+        static int locRoughness   = glGetUniformLocation(sceneShader.program, "material.roughness");
+        static int locAO          = glGetUniformLocation(sceneShader.program, "material.ao");
+        static int locMask        = glGetUniformLocation(sceneShader.program, "material.mask");
+        static int locMetallic    = glGetUniformLocation(sceneShader.program, "material.metallic");
+        static int locDisplacement= glGetUniformLocation(sceneShader.program, "displacement");
+        aaShader.UseShader();
+        static int locScreenTexture = glGetUniformLocation(aaShader.program, "screenTexture");
+        static int locScreenSize  = glGetUniformLocation(aaShader.program, "screenSize");
+        static int locCurrentAA   = glGetUniformLocation(aaShader.program, "currentAA");
+        static int locSampleCount = glGetUniformLocation(aaShader.program, "sampleCount");
+        static int locJitter      = glGetUniformLocation(aaShader.program, "jitter");
+        static int locBlendFactor = glGetUniformLocation(aaShader.program, "blendFactor");
+        static int locHistoryTexture = glGetUniformLocation(aaShader.program, "historyTexture");
+        glUniform3f(glGetUniformLocation(sceneShader.program, "lightDir"), -0.3f, -1.0f, -0.2f);
+        glUniform3f(glGetUniformLocation(sceneShader.program, "lightColor"), 1.0f, 1.0f, 1.0f);
 
-
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         while (!glfwWindowShouldClose(window)) {
             GLfloat currentFrame = glfwGetTime();
             deltaTime = currentFrame - lastFrame;
@@ -180,96 +210,109 @@ vector<string> faces
             ImGui_ImplGlfw_NewFrame();
             ImGui::NewFrame();
             if (!ImGui::GetIO().WantCaptureKeyboard){movement();}
-
-
-
+            //Resize function
             if (oldWidth != newWidth || oldHeight != newHeight) {
-                oldWidth = newWidth;
-                oldHeight = newHeight;
-                glBindTexture(GL_TEXTURE_2D, fboTexture);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    oldWidth = newWidth;
+    oldHeight = newHeight;
 
 
-                glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-                glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, oldWidth, oldHeight);
+    glDeleteTextures(1, &fboTexture);
+    if (currentAA == 4) glDeleteTextures(1, &historyTexture);
+    glDeleteFramebuffers(1, &fbo);
 
-                if(historyTexture != 0 && currentAA == 4) {
-                    glBindTexture(GL_TEXTURE_2D, historyTexture);
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-                }
-                glBindTexture(GL_TEXTURE_2D, 0);
-                glBindRenderbuffer(GL_RENDERBUFFER, 0);
-                glBindTexture(GL_TEXTURE_2D, taaTexture);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-                Resize(window, oldWidth, oldHeight);
-                cornerDetector.updateSize(oldWidth, oldHeight);
-            }
 
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+
+    glGenTextures(1, &fboTexture);
+    glBindTexture(GL_TEXTURE_2D, fboTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboTexture, 0);
+    if (currentAA == 4) {
+        glGenTextures(1, &historyTexture);
+        glBindTexture(GL_TEXTURE_2D, historyTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, oldWidth, oldHeight);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cerr << "FBO not complete after resize!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+
+    glBindTexture(GL_TEXTURE_2D, taaTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+
+    Resize(window, oldWidth, oldHeight);
+    cornerDetector.updateSize(oldWidth, oldHeight);
+}
             glBindFramebuffer(GL_FRAMEBUFFER, fbo);
             glEnable(GL_DEPTH_TEST);
             glClearColor(0.3f, 0.1f, 0.5f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
             sceneShader.UseShader();
-            vec3 lightDir = normalize(vec3(-0.5f, -1.0f, -0.3f));
-            vec3 lightColor = vec3(1.0f, 1.0f, 1.0f);
-
-            glUniform3fv(glGetUniformLocation(sceneShader.program, "lightDir"), 1, value_ptr(lightDir));
-            glUniform3fv(glGetUniformLocation(sceneShader.program, "lightColor"), 1, value_ptr(lightColor));
-            //Scale for model
-            mat4 model = scale(mat4(0.4f), vec3(0.1f));
-            model = rotate(model,radians(90.0f), vec3(-1.0f, 0.0f, 0.0f));
-
-
             mat4 view = lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-
             float jitterX = Halton((frameIndex % 8) + 1, 2) - 0.5f;
             float jitterY = Halton((frameIndex % 8) + 1, 3) - 0.5f;
-
             vec2 jitter(jitterX , jitterY );
             vec2 jitterUV = jitter / vec2(oldWidth, oldHeight);
-
             frameIndex++;
-            mat4 projection = perspective(radians(45.0f), (float)oldWidth / (float)oldHeight, 0.1f, 100.0f);
+            mat4 projection = perspective(radians(80.0f), static_cast<float>(oldWidth) / static_cast<float>(oldHeight), 0.01f, 1000.0f);
             if (currentAA == 4) {
                 projection[2][0] += jitterUV.x* 2.0f;
                 projection[2][1] += jitterUV.y* 2.0f;
             }
-            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "view"), 1, GL_FALSE, value_ptr(view));
-            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "projection"), 1, GL_FALSE, value_ptr(projection));
-            glUniformMatrix4fv(glGetUniformLocation(sceneShader.program, "model"), 1, GL_FALSE, value_ptr(model));
+            glUniformMatrix4fv(locView, 1, GL_FALSE, value_ptr(view));
+            glUniformMatrix4fv(locProjection, 1, GL_FALSE, value_ptr(projection));
+            glUniformMatrix4fv(locModel, 1, GL_FALSE, value_ptr(model));
+            for (const auto& mesh : meshes)
+            {
+                glUniform1i(locHasDiffuse,mesh.materialTextures.baseColorID != 0);
+                glUniform1i(locHasNormal,mesh.materialTextures.normalID != 0);
+                glUniform1i(locHasRoughness,mesh.materialTextures.roughnessID != 0);
+                glUniform1i(locHasAO,mesh.materialTextures.aoID != 0);
+                glUniform1i(locHasMask,mesh.materialTextures.maskID != 0);
+                glUniform1i(locHasMetallic,mesh.materialTextures.metallicID != 0);
+                glUniform1i(locHasDisplacement,mesh.materialTextures.displacementID != 0);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.baseColorID);
+                glUniform1i(locDiffuse, 0);
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.normalID);
+                glUniform1i(locNormal, 1);
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.roughnessID);
+                glUniform1i(locRoughness, 2);
+                glActiveTexture(GL_TEXTURE3);
+                glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.aoID);
+                glUniform1i(locAO, 3);
+                glActiveTexture(GL_TEXTURE4);
+                glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.maskID);
+                glUniform1i(locMask, 4);
+                glActiveTexture(GL_TEXTURE5);
+                glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.metallicID);
+                glUniform1i(locMetallic, 5);
+                glActiveTexture(GL_TEXTURE6);
+                glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.displacementID);
+                glUniform1i(locDisplacement, 6);
+                glUniform1f(glGetUniformLocation(sceneShader.program, "displacementScale"), 0.05f);
+                glm::mat4 finalModel = model * mesh.transform;
+                glUniformMatrix4fv(locModel, 1, GL_FALSE, glm::value_ptr(finalModel));
 
-            glBindVertexArray(0);
-
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-            glEnable(GL_DEPTH_TEST);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-
-            for (const auto& mesh : meshes) {
-                if (mesh.materialTextures.baseColorID != 0) {
-                    glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.baseColorID);
-                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.diffuse"), 0);
-                }
-                if (mesh.materialTextures.normalID != 0) {
-                    glActiveTexture(GL_TEXTURE1);
-                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.normalID);
-                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.normal"), 1);
-                }
-                if (mesh.materialTextures.roughnessID != 0) {
-                    glActiveTexture(GL_TEXTURE2);
-                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.roughnessID);
-                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.roughness"), 2);
-                }
-                if (mesh.materialTextures.aoID != 0) {
-                    glActiveTexture(GL_TEXTURE3);
-                    glBindTexture(GL_TEXTURE_2D, mesh.materialTextures.aoID);
-                    glUniform1i(glGetUniformLocation(sceneShader.program, "material.ao"), 3);
-                }
                 mesh.Draw();
             }
-
 
              glDepthFunc(GL_LEQUAL);
              glDepthMask(GL_FALSE);
@@ -285,9 +328,9 @@ vector<string> faces
                     aaShader.UseShader();
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, fboTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "screenTexture"), 0);
-                    glUniform2f(glGetUniformLocation(aaShader.program, "screenSize"), (float)oldWidth, (float)oldHeight);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "currentAA"), 0);
+                    glUniform1i(locScreenTexture, 0);
+                    glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
+                    glUniform1i(locCurrentAA, 0);
                     renderScreenQuad();
 
 
@@ -297,9 +340,9 @@ vector<string> faces
                     aaShader.UseShader();
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, fboTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "screenTexture"), 0);
-                    glUniform2f(glGetUniformLocation(aaShader.program, "screenSize"), (float)oldWidth, (float)oldHeight);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "currentAA"), 1);
+                    glUniform1i(locScreenTexture, 0);
+                    glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
+                    glUniform1i(locCurrentAA, 1);
                     renderScreenQuad();
                     break;
                 }
@@ -307,9 +350,9 @@ vector<string> faces
                     aaShader.UseShader();
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, fboTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "screenTexture"), 0);
-                    glUniform2f(glGetUniformLocation(aaShader.program, "screenSize"), (float)oldWidth, (float)oldHeight);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "currentAA"), 2);
+                    glUniform1i(locScreenTexture, 0);
+                    glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
+                    glUniform1i(locCurrentAA, 2);
                      renderScreenQuad();
                     break;
                 }
@@ -317,10 +360,10 @@ vector<string> faces
                     aaShader.UseShader();
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, fboTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "screenTexture"), 0);
-                    glUniform2f(glGetUniformLocation(aaShader.program, "screenSize"), (float)oldWidth, (float)oldHeight);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "sampleCount"), 4);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "currentAA"), 3);
+                    glUniform1i(locScreenTexture, 0);
+                    glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
+                    glUniform1i(locSampleCount, 4);
+                    glUniform1i(locCurrentAA, 3);
 
                     renderScreenQuad();
                     break;
@@ -332,18 +375,18 @@ vector<string> faces
                     glClear(GL_COLOR_BUFFER_BIT);
 
                     aaShader.UseShader();
-                    glUniform2f(glGetUniformLocation(aaShader.program, "jitter"), jitterUV.x, jitterUV.y);
-                    glUniform1f(glGetUniformLocation(aaShader.program, "blendFactor"), 0.1f);
+                    glUniform2f(locJitter, jitterUV.x, jitterUV.y);
+                    glUniform1f(locBlendFactor, 0.1f);
 
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, fboTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "screenTexture"), 0);
+                    glUniform1i(locScreenTexture, 0);
 
                     glActiveTexture(GL_TEXTURE1);
                     glBindTexture(GL_TEXTURE_2D, historyTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "historyTexture"), 1);
+                    glUniform1i(locHistoryTexture, 1);
 
-                    glUniform1i(glGetUniformLocation(aaShader.program, "currentAA"), 4);
+                    glUniform1i(locCurrentAA, 4);
                     renderScreenQuad();
 
 
@@ -356,10 +399,10 @@ vector<string> faces
 
                     glBindFramebuffer(GL_FRAMEBUFFER, 0);
                     aaShader.UseShader();
-                    glUniform1i(glGetUniformLocation(aaShader.program, "currentAA"), 0);
+                    glUniform1i(locCurrentAA, 0);
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, taaTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "screenTexture"), 0);
+                    glUniform1i(locScreenTexture, 0);
                     renderScreenQuad();
 
 
@@ -370,38 +413,39 @@ vector<string> faces
                     aaShader.UseShader();
                     glActiveTexture(GL_TEXTURE0);
                     glBindTexture(GL_TEXTURE_2D, fboTexture);
-                    glUniform1i(glGetUniformLocation(aaShader.program, "screenTexture"), 0);
-                    glUniform2f(glGetUniformLocation(aaShader.program, "screenSize"), (float)oldWidth, (float)oldHeight);
+                    glUniform1i(locScreenTexture, 0);
+                    glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
 
-                    glUniform1i(glGetUniformLocation(aaShader.program, "currentAA"), 0);
+                    glUniform1i(locCurrentAA, 0);
                 renderScreenQuad();
-
                 }
 
                     break;
             }
-
-
-
             if (detectCorners) {
-
                 std::vector<unsigned char> pixels(newWidth * newHeight * 3);
                 glReadPixels(0, 0, newWidth, newHeight, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
-
                 std::vector<unsigned char> gray(newWidth * newHeight);
-                for (int i = 0; i < newWidth * newHeight; ++i) {
-                    int r = pixels[3 * i];
-                    int g = pixels[3 * i + 1];
-                    int b = pixels[3 * i + 2];
-                    gray[i] = static_cast<unsigned char>(0.299f * r + 0.587f * g + 0.114f * b);
+                for (int y = 0; y < newHeight; ++y) {
+                    for (int x = 0; x < newWidth; ++x) {
+                        int srcIdx = ((newHeight - 1 - y) * newWidth + x) * 3; // flip Y
+                        int dstIdx = y * newWidth + x;
+                        int r = pixels[srcIdx];
+                        int g = pixels[srcIdx + 1];
+                        int b = pixels[srcIdx + 2];
+                        gray[dstIdx] = static_cast<unsigned char>(0.299f * r + 0.587f * g + 0.114f * b);
+                    }
                 }
-                auto corners = CornerDetector::ApplySobel(gray.data(), newWidth, newHeight, overlay.threshold);
-                //Save sobelVisualizer
-              //  auto sobelVisualizer = CornerDetector::sobelVisualizer(gray.data(), newWidth, newHeight, overlay.threshold);
-              //  ImageCapture::saveGreyImage(newWidth,newHeight,sobelVisualizer,"SobelVisual.tga");
-                overlay.detectedCornersCount = corners.size();
 
+                auto corners = CornerDetector::ApplySobel(gray.data(), newWidth, newHeight, overlay.threshold);
+                overlay.detectedCornersCount = corners.size();
+                //TODO: Remove
+                //auto sobelGray = CornerDetector::sobelVisualizerGrey(gray.data(), newWidth, newHeight, overlay.threshold, false);
+                //ImageCapture::saveGreyImage(newWidth, newHeight, sobelGray, "SobelGray.png");
+               // auto sobelColor = CornerDetector::sobelVisualizerRGB(gray.data(), newWidth, newHeight, overlay.threshold, false);
+               // ImageCapture::saveColorImage(newWidth, newHeight, sobelColor, "SobelColor.png");
             }
+
             if (fourierTransform) {
                 std::vector<unsigned char> pixels(newWidth * newHeight * 3);
                 glReadPixels(0, 0, newWidth, newHeight, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
@@ -413,7 +457,7 @@ vector<string> faces
                     int b = pixels[3 * i + 2];
                     gray[i] = static_cast<unsigned char>(0.299f * r + 0.587f * g + 0.114f * b);
                 }
-                ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.tga");
+                //ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.png");
 
                 std::thread([gray = std::move(gray), &overlay, &cornerDetector]() {
                     cornerDetector.setGrayImage(gray.data(), newWidth, newHeight);
@@ -424,9 +468,8 @@ vector<string> faces
                     auto edgeSharp = cornerDetector.getGuiEdgeSharpness();
 
                     //Images for paper TODO:REMOVE
-                    // cornerDetector.captureSpectrumImage(magSpec,"fourier_Magnitude.tga");
-                    // cornerDetector.captureSpectrumImage(phaseCorr,"fourier_PhaseCorrelation.tga");
-                    // cornerDetector.captureSpectrumImage(psd,"fourier_PowerSpectralDensity.tga");
+                   //  cornerDetector.captureSpectrumImage(phaseCorr,"fourier_PhaseCorrelation.png");
+                   //  cornerDetector.captureSpectrumImage(psd,"fourier_PowerSpectralDensity.png");
 
 
                     std::lock_guard<std::mutex> lock(overlayMutex);
@@ -438,7 +481,7 @@ vector<string> faces
                     std::cerr << "Fourier transform calculations done." << std::endl;
                 }).detach();
             } {
-                overlay.graphSize = ImVec2(480, 240); // Change size of graph
+                overlay.graphSize = ImVec2(1024, 480); // Change size of graph
                 std::lock_guard<std::mutex> lock(overlayMutex);
                overlay.renderGUI(cursorEnabled,currentAA, fourierTransform);
                 fourierTransform = false;
@@ -448,7 +491,6 @@ vector<string> faces
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             glfwSwapBuffers(window);
         }
-
          glDeleteVertexArrays(1, &quadVAO);
          glDeleteBuffers(1, &quadVBO);
         glDeleteFramebuffers(1, &fbo);
@@ -459,7 +501,7 @@ vector<string> faces
         TextureManager::Clear();
         overlay.shutDownGUI();
         glfwTerminate();
-        return 1;
+        return 0;
     }
 
 
@@ -554,9 +596,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                     cursorEnabled = !cursorEnabled;
                     glfwSetInputMode(window, GLFW_CURSOR, cursorEnabled ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
                     break;
-
+                case GLFW_KEY_UP:
+                    sun_Direction = sun_Direction+1.0f;
+                    break;
+                case GLFW_KEY_DOWN:
+                    sun_Direction = sun_Direction-1.0f;
                     default:
                     break;
+
             }
         }
 
@@ -569,7 +616,7 @@ bool firstMouse = true;
 void mouse_callback(GLFWwindow* window, double xPos, double yPos) {
 
     ImGuiIO& io = ImGui::GetIO();
-    io.MousePos = ImVec2((float)xPos, (float)yPos);
+    io.MousePos = ImVec2(static_cast<float>(xPos), static_cast<float>(yPos));
     if (cursorEnabled || io.WantCaptureMouse) return;
 
     if (cursorEnabled) return;
@@ -606,7 +653,7 @@ void mouse_callback(GLFWwindow* window, double xPos, double yPos) {
 }
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    ImGui::GetIO().AddMouseWheelEvent((float)xoffset, (float)yoffset);
+    ImGui::GetIO().AddMouseWheelEvent(static_cast<float>(xoffset), static_cast<float>(yoffset));
 }
 void movement() {
     GLfloat cameraSpeed = 5.0f * deltaTime;
@@ -640,7 +687,7 @@ GLFWmonitor* monitor = glfwGetPrimaryMonitor();
 }
 float Halton(int index, int base) {
     float result = 0.0f;
-    float f = 1.0f / (float)base;
+    float f = 1.0f / static_cast<float>(base);
     int i = index;
     while(i > 0) {
         result += f * (i % base);
@@ -656,14 +703,11 @@ void setupScreenQuad() {
     glBindVertexArray(quadVAO);
     glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-
-    // Position attribute
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), static_cast<void *>(nullptr));
 
-    // TexCoord attribute
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void *>(2 * sizeof(float)));
 
     glBindVertexArray(0);
 }

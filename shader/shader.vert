@@ -1,32 +1,45 @@
 #version 330 core
-out vec4 FragColor;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aTexCoord;
+layout(location = 3) in vec3 aTangent;
+layout(location = 4) in vec3 aBitangent;
 
-in vec2 TexCoord;
+out vec2 TexCoord;
+out vec3 FragPos;
+out vec3 Normal;
+out vec3 Tangent;
+out vec3 Bitangent;
 
-struct Material {
-    sampler2D diffuse;
-    sampler2D normal;
-    sampler2D roughness;
-    sampler2D ao;
-};
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
 
-uniform Material material;
-uniform vec3 lightDir;
-uniform vec3 lightColor;
+uniform bool hasDisplacement;
+uniform sampler2D displacement;
+uniform float displacementScale;
 
 void main()
 {
-    vec3 color = texture(material.diffuse, TexCoord).rgb;
+    mat3 normalMatrix = mat3(transpose(inverse(model)));
 
+    vec3 N = normalize(normalMatrix * aNormal);
+    vec3 T = normalize(normalMatrix * aTangent);
+    vec3 B = normalize(normalMatrix * aBitangent);
+    vec3 displacedPos = aPos;
+    if (hasDisplacement)
+    {
+        float height = texture(displacement, aTexCoord).r;
+        displacedPos += aNormal * (height * displacementScale);
+    }
 
-    vec3 normalMap = texture(material.normal, TexCoord).rgb;
-    vec3 N = normalize(normalMap * 2.0 - 1.0);
-    float diffuse = max(dot(N, -lightDir), 0.0);
-    color *= diffuse * lightColor;
+    vec4 worldPos = model * vec4(displacedPos, 1.0);
 
+    FragPos  = worldPos.xyz;
+    Normal   = N;
+    Tangent  = T;
+    Bitangent= B;
+    TexCoord = aTexCoord;
 
-    float ambientOcclusion = texture(material.ao, TexCoord).r;
-    color *= ambientOcclusion;
-
-    FragColor = vec4(color, 1.0);
+    gl_Position = projection * view * worldPos;
 }

@@ -66,8 +66,24 @@ void OverLay::renderGUI(bool cursorEnable,int currentAA, bool fourierTransformRe
         ImGuiWindowFlags_NoFocusOnAppearing |
         ImGuiWindowFlags_NoNav);
 
-    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+    // float currentFPS = ImGui::GetIO().Framerate;
+    // fpsSum += currentFPS;
+    // fpsFrames++;
+    // if (currentFPS > peakFPS) peakFPS = currentFPS;
+    // if (currentFPS < lowestFPS) lowestFPS = currentFPS;
+    // float avgFPS = fpsSum / fpsFrames;
+    // if (ImGui::Button("Reset FPS Stats")) {
+    //     peakFPS = 0.0f;
+    //     lowestFPS = FLT_MAX;
+    //     fpsSum = 0.0f;
+    //     fpsFrames = 0;
+    // }
+    // ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    // ImGui::Text("Peak FPS: %.1f", peakFPS);
+    // ImGui::Text("Lowest FPS: %.1f", lowestFPS);
+    // ImGui::Text("Average FPS: %.1f", avgFPS);
+    // ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+
     switch (currentAA) {
         case 0:ImGui::Text("Antialiasing: None"); break;
         case 1:ImGui::Text("Antialiasing: FXAA"); break;
@@ -97,22 +113,22 @@ void OverLay::renderGUI(bool cursorEnable,int currentAA, bool fourierTransformRe
                 downsampledSpec = downsample_minmax(fourierPowerSpectralDensity, 512);
                 averageSpec = average(fourierPowerSpectralDensity);
             }
-            ImGui::PlotLines("##MagPlot", downsampledMag.data(), (int)downsampledMag.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(graphSize));
+          //  ImGui::PlotLines("##MagPlot", downsampledMag.data(), (int)downsampledMag.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(graphSize));
             ImGui::SeparatorText("Fourier Magnitude Spectrum");
             ImGui::Text("Average: %.3f", averageMag);
-            for (int i = 0; i < 5 && i < (int)downsampledMag.size(); ++i)
-                ImGui::Text("[%d] = %.3f", i, downsampledMag[i]);
+            // for (int i = 0; i < 10 && i < (int)downsampledMag.size(); ++i)
+            //     ImGui::Text("[%d] = %.3f", i, downsampledMag[i]);
             ImGui::Text("Edge Sharpness: %.3f", edgeSharpness); // Edge text
             ImGui::SeparatorText("Phase Correlation");
-            ImGui::PlotLines("##PhasePlot", downsampledPhase.data(), (int)downsampledPhase.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(graphSize));
+            //ImGui::PlotLines("##PhasePlot", downsampledPhase.data(), (int)downsampledPhase.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(graphSize));
             ImGui::Text("Average: %.3f", averagePhase);
-            for (int i = 0; i < 5 && i < (int)downsampledPhase.size(); ++i)
-                ImGui::Text("[%d] = %.3f", i, downsampledPhase[i]);
+            // for (int i = 0; i < 10 && i < (int)downsampledPhase.size(); ++i)
+            //     ImGui::Text("[%d] = %.3f", i, downsampledPhase[i]);
             ImGui::SeparatorText("Power Spectral Density");
-            ImGui::PlotLines("##PSDPlot", downsampledSpec.data(), (int)downsampledSpec.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(graphSize));
+            //ImGui::PlotLines("##PSDPlot", downsampledSpec.data(), (int)downsampledSpec.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(graphSize));
             ImGui::Text("Average: %.3f", averageSpec);
-            for (int i = 0; i < 5 && i < (int)downsampledSpec.size(); ++i)
-                ImGui::Text("[%d] = %.3f", i, downsampledSpec[i]);
+            // for (int i = 0; i < 10 && i < (int)downsampledSpec.size(); ++i)
+            //     ImGui::Text("[%d] = %.3f", i, downsampledSpec[i]);
         }
 
 
