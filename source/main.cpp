@@ -493,9 +493,12 @@ vector<string> faces
                 }
                 if (currentAA == 2) {
                     ImageCapture::saveScreenShot(newWidth,newHeight,"SSAAScreenShot.png");
+                    cornerDetector.setReferenceImageSSAA(pixels.data(), newWidth, newHeight);
+
                 }
                 else {
                     ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.png");
+                    cornerDetector.setReferenceImageNoAA(pixels.data(), newWidth, newHeight);
                 }
 
                 std::thread([gray = std::move(gray), &overlay, &cornerDetector]() {

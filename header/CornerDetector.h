@@ -41,6 +41,8 @@ public:
     bool overlayOriginal
     );
     void setGrayImage(const unsigned char* grayImage, int w, int h);
+    void setReferenceImageNoAA(const unsigned char* referenceImage, int w, int h);
+    void setReferenceImageSSAA(const unsigned char* referenceImage, int w, int h);
     void captureSpectrumImage(std::vector<float>& spectrum, const char* filename);
 private:
     int width, height;
@@ -54,6 +56,8 @@ private:
     std::vector<float> computeMagnitudeSpectrum(const unsigned char* grayImage);
     std::vector<float> computePhaseSpectrum(const unsigned char* grayImage);
     std::vector<float> computePowerSpectralDensity(const std::vector<float>& magnitudeSpectrum);
+    std::vector<unsigned char> referenceNoAA;
+    std::vector<unsigned char> referenceSSAA;
     std::vector<float> guiFourierMagnitudeSpectrum;
     std::vector<float> guiFourierPhaseCorrelation;
     std::vector<float> guiFourierPowerSpectralDensity;

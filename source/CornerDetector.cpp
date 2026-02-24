@@ -136,6 +136,18 @@ void CornerDetector::setGrayImage(const unsigned char* grayImage, int w, int h) 
     std::lock_guard<std::mutex> lock(dataMutex);
     lastGrayImage.assign(grayImage, grayImage + (w * h));
 }
+//Store images for use
+void CornerDetector::setReferenceImageNoAA(const unsigned char *referenceImage, int w, int h) {
+    width = w;
+    height = h;
+    referenceNoAA.assign(referenceImage, referenceImage + w * h * 3);
+}
+
+void CornerDetector::setReferenceImageSSAA(const unsigned char *referenceImage, int w, int h) {
+    width = w;
+    height = h;
+    referenceSSAA.assign(referenceImage, referenceImage + w * h * 3);
+}
 
 void CornerDetector::captureSpectrumImage(std::vector<float> &spectrum, const char* filename) {
 
