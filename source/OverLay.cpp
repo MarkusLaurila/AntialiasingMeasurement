@@ -66,23 +66,23 @@ void OverLay::renderGUI(bool cursorEnable,int currentAA, bool fourierTransformRe
         ImGuiWindowFlags_NoFocusOnAppearing |
         ImGuiWindowFlags_NoNav);
 
-    // float currentFPS = ImGui::GetIO().Framerate;
-    // fpsSum += currentFPS;
-    // fpsFrames++;
-    // if (currentFPS > peakFPS) peakFPS = currentFPS;
-    // if (currentFPS < lowestFPS) lowestFPS = currentFPS;
-    // float avgFPS = fpsSum / fpsFrames;
-    // if (ImGui::Button("Reset FPS Stats")) {
-    //     peakFPS = 0.0f;
-    //     lowestFPS = FLT_MAX;
-    //     fpsSum = 0.0f;
-    //     fpsFrames = 0;
-    // }
-    // ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-    // ImGui::Text("Peak FPS: %.1f", peakFPS);
-    // ImGui::Text("Lowest FPS: %.1f", lowestFPS);
-    // ImGui::Text("Average FPS: %.1f", avgFPS);
-    // ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+    float currentFPS = ImGui::GetIO().Framerate;
+    fpsSum += currentFPS;
+    fpsFrames++;
+    if (currentFPS > peakFPS) peakFPS = currentFPS;
+    if (currentFPS < lowestFPS) lowestFPS = currentFPS;
+    float avgFPS = fpsSum / fpsFrames;
+    if (ImGui::Button("Reset FPS Stats")) {
+        peakFPS = 0.0f;
+        lowestFPS = FLT_MAX;
+        fpsSum = 0.0f;
+        fpsFrames = 0;
+    }
+    ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+    ImGui::Text("Peak FPS: %.1f", peakFPS);
+    ImGui::Text("Lowest FPS: %.1f", lowestFPS);
+    ImGui::Text("Average FPS: %.1f", avgFPS);
+    ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
 
     switch (currentAA) {
         case 0:ImGui::Text("Antialiasing: None"); break;
@@ -101,14 +101,18 @@ void OverLay::renderGUI(bool cursorEnable,int currentAA, bool fourierTransformRe
 
             if (fourierTransformRequested || lastMagSize == 0) {
 
+
                 lastMagSize = fourierMagnitudeSpectrum.size();
                 downsampledMag = downsample_minmax(fourierMagnitudeSpectrum, 512);
                 averageMag = average(fourierMagnitudeSpectrum);
 
                 lastPhaseSize = fourierPhaseCorrelation.size();
                 downsampledPhase = downsample_minmax(fourierPhaseCorrelation, 512);
-                averagePhase = average(fourierPhaseCorrelation);
-
+                if (!fourierPhaseCorrelation.empty()) {
+                    auto it = std::max_element(fourierPhaseCorrelation.begin(),
+                                               fourierPhaseCorrelation.end());
+                    averagePhase = *it;
+                }
                 lastSpecSize = fourierPowerSpectralDensity.size();
                 downsampledSpec = downsample_minmax(fourierPowerSpectralDensity, 512);
                 averageSpec = average(fourierPowerSpectralDensity);
@@ -120,8 +124,9 @@ void OverLay::renderGUI(bool cursorEnable,int currentAA, bool fourierTransformRe
             //     ImGui::Text("[%d] = %.3f", i, downsampledMag[i]);
             ImGui::Text("Edge Sharpness: %.3f", edgeSharpness); // Edge text
             ImGui::SeparatorText("Phase Correlation");
-            //ImGui::PlotLines("##PhasePlot", downsampledPhase.data(), (int)downsampledPhase.size(), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(graphSize));
-            ImGui::Text("Average: %.3f", averagePhase);
+
+                ImGui::Text("Peak Value: %.6f", averagePhase);
+
             // for (int i = 0; i < 10 && i < (int)downsampledPhase.size(); ++i)
             //     ImGui::Text("[%d] = %.3f", i, downsampledPhase[i]);
             ImGui::SeparatorText("Power Spectral Density");

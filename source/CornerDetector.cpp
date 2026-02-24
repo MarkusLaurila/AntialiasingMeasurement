@@ -2,62 +2,53 @@
 #include <iostream>
 #include <algorithm>
 #include "ImageCapture.h"
-
+#include <complex>
+#include <cmath>
 CornerDetector::CornerDetector(int width, int height)
-    : width(width), height(height) ,fftPlan(nullptr), fftInput(nullptr), fftOutput(nullptr) {
+    : width(width), height(height){
     ensureFFTInitialized();
+    ensureIFFTInitialized();
     updateSize(width, height);
 }
 
 CornerDetector::~CornerDetector() {
     if (fftPlan) fftw_destroy_plan(fftPlan);
+    if (ifftPlan) fftw_destroy_plan(ifftPlan);
     if (fftInput) fftw_free(fftInput);
     if (fftOutput) fftw_free(fftOutput);
+    if (ifftOutput) fftw_free(ifftOutput);
 }
 
 void CornerDetector::updateSize(int newWidth, int newHeight) {
-    if (newWidth <= 0 || newHeight <= 0) {
-        std::cerr << "Invalid size in updateSize: " << newWidth << "x" << newHeight << std::endl;
-        return;
-    }
+    if (newWidth <= 0 || newHeight <= 0) return;
 
     if (newWidth != width || newHeight != height) {
         width = newWidth;
         height = newHeight;
         fftOutputWidth = width / 2 + 1;
         fftOutputSize = height * fftOutputWidth;
-        if (fftPlan) {
-            fftw_destroy_plan(fftPlan);
-            fftPlan = nullptr;
-        }
-        if (fftInput) {
-            fftw_free(fftInput);
-            fftInput = nullptr;
-        }
-        if (fftOutput) {
-            fftw_free(fftOutput);
-            fftOutput = nullptr;
-        }
         int inputSize = width * height;
-        int outputWidth = width / 2 + 1;
-        int outputSize = height * outputWidth;
+
+        if (fftPlan) { fftw_destroy_plan(fftPlan); fftPlan = nullptr; }
+        if (ifftPlan) { fftw_destroy_plan(ifftPlan); ifftPlan = nullptr; }
+
+        if (fftInput) { fftw_free(fftInput); fftInput = nullptr; }
+        if (fftOutput) { fftw_free(fftOutput); fftOutput = nullptr; }
+        if (ifftOutput) { fftw_free(ifftOutput); ifftOutput = nullptr; }
 
         fftInput = (double*)fftw_malloc(sizeof(double) * inputSize);
-        fftOutput = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * outputSize);
-        fftPlan = fftw_plan_dft_r2c_2d(height, width, fftInput, fftOutput, FFTW_ESTIMATE);
+        fftOutput = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * fftOutputSize);
+        ifftOutput = (double*)fftw_malloc(sizeof(double) * inputSize);
 
-        if (!fftInput || !fftOutput) {
+        if (!fftInput || !fftOutput || !ifftOutput) {
             std::cerr << "FFTW malloc failed in updateSize\n";
-            if (fftInput) fftw_free(fftInput);
-            if (fftOutput) fftw_free(fftOutput);
-            fftInput = nullptr;
-            fftOutput = nullptr;
             return;
         }
+        fftPlan = fftw_plan_dft_r2c_2d(height, width, fftInput, fftOutput, FFTW_ESTIMATE);
+        ifftPlan = fftw_plan_dft_c2r_2d(height, width, fftOutput, ifftOutput, FFTW_ESTIMATE);
 
-        if (!fftPlan) {
+        if (!fftPlan || !ifftPlan)
             std::cerr << "FFTW plan creation failed in updateSize\n";
-        }
     }
 }
 
@@ -73,6 +64,23 @@ void CornerDetector::ensureFFTInitialized() {
     fftOutput = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * fftOutputSize);
 
     fftPlan = fftw_plan_dft_r2c_2d(height, width, fftInput, fftOutput, FFTW_ESTIMATE);
+}
+
+void CornerDetector::ensureIFFTInitialized() {
+    if (ifftPlan != nullptr) return;
+    int inputSize = width * height;
+    ifftOutput = (double*)fftw_malloc(sizeof(double) * inputSize);
+    ifftPlan = fftw_plan_dft_c2r_2d(
+        height, width,
+        fftOutput,
+        ifftOutput,
+        FFTW_ESTIMATE
+    );
+    if (!ifftPlan || !ifftOutput) {
+        std::cerr << "FFTW inverse plan or buffer creation failed\n";
+        if (ifftOutput) fftw_free(ifftOutput);
+        ifftOutput = nullptr;
+    }
 }
 
 std::vector<std::pair<int, int>> CornerDetector::ApplySobel(const unsigned char* grayImage, int width, int height, float threshold) {
@@ -115,18 +123,13 @@ std::vector<std::pair<int, int>> CornerDetector::ApplySobel(const unsigned char*
 
     return corners;
 }
-
-void CornerDetector::prepareDataForGUI() {
+void CornerDetector::prepareDataForGUI(AAType aaType) {
     std::lock_guard<std::mutex> lock(dataMutex);
 
-    if (lastGrayImage.empty()) {
-        std::cerr << "No image data to prepare GUI." << std::endl;
-        return;
-    }
-    guiFourierMagnitudeSpectrum = computeMagnitudeSpectrum(lastGrayImage.data());
-    guiFourierPhaseCorrelation = computePhaseSpectrum(lastGrayImage.data());
-    guiFourierPowerSpectralDensity = computePowerSpectralDensity(guiFourierMagnitudeSpectrum);
-    guiEdgeSharpness = computeEdgeSharpness(lastGrayImage.data());
+    guiFourierMagnitudeSpectrum = computeMagnitudeSpectrum();
+    guiFourierPhaseCorrelation = computePhaseCorrelation(aaType);
+    guiFourierPowerSpectralDensity = computePowerSpectralDensity();
+    guiEdgeSharpness = computeEdgeSharpness((aaType == AAType::SSAA) ? referenceSSAA.data() : referenceNoAA.data());
 }
 void CornerDetector::setGrayImage(const unsigned char* grayImage, int w, int h) {
     if (w != width || h != height) {
@@ -136,19 +139,6 @@ void CornerDetector::setGrayImage(const unsigned char* grayImage, int w, int h) 
     std::lock_guard<std::mutex> lock(dataMutex);
     lastGrayImage.assign(grayImage, grayImage + (w * h));
 }
-//Store images for use
-void CornerDetector::setReferenceImageNoAA(const unsigned char *referenceImage, int w, int h) {
-    width = w;
-    height = h;
-    referenceNoAA.assign(referenceImage, referenceImage + w * h * 3);
-}
-
-void CornerDetector::setReferenceImageSSAA(const unsigned char *referenceImage, int w, int h) {
-    width = w;
-    height = h;
-    referenceSSAA.assign(referenceImage, referenceImage + w * h * 3);
-}
-
 void CornerDetector::captureSpectrumImage(std::vector<float> &spectrum, const char* filename) {
 
     float minVal = *std::min_element(spectrum.begin(), spectrum.end());
@@ -212,66 +202,88 @@ float CornerDetector::computeEdgeSharpness(const unsigned char* grayImage) {
 
     return (count > 0) ? static_cast<float>(sumGradMagnitude / count) : 0.0f;
 }
-std::vector<float> CornerDetector::computeMagnitudeSpectrum(const unsigned char* grayImage) {
+
+
+std::vector<float> CornerDetector::computeMagnitudeSpectrum() {
     ensureFFTInitialized();
 
+    if (lastGrayImage.empty()) return {};
+
     int inputSize = width * height;
-
     for (int i = 0; i < inputSize; ++i)
-        fftInput[i] = static_cast<double>(grayImage[i]);
-
+        fftInput[i] = static_cast<double>(lastGrayImage[i]);
     fftw_execute(fftPlan);
 
-    std::vector<float> magSpectrum(fftOutputSize, 0.0f);
-
+    std::vector<float> magSpectrum(fftOutputSize);
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < fftOutputWidth; ++x) {
             int idx = y * fftOutputWidth + x;
             double real = fftOutput[idx][0];
             double imag = fftOutput[idx][1];
-            double mag = std::sqrt(real * real + imag * imag);
-            magSpectrum[idx] = static_cast<float>(std::log(1.0 + mag));
+            magSpectrum[idx] = static_cast<float>(std::log(1.0 + std::sqrt(real*real + imag*imag)));
         }
     }
-
     return magSpectrum;
 }
 
-
-std::vector<float> CornerDetector::computePhaseSpectrum(const unsigned char* grayImage) {
+std::vector<float> CornerDetector::computePhaseCorrelation(AAType aaType) {
     ensureFFTInitialized();
+    ensureIFFTInitialized();
+
+    const std::vector<unsigned char>& refImage = (aaType == AAType::SSAA) ? referenceSSAA : referenceNoAA;
+    if (refImage.empty() || lastGrayImage.empty()) return {};
 
     int inputSize = width * height;
+    std::vector<double> currentInput(inputSize);
+    std::vector<double> referenceInput(inputSize);
+    std::vector<std::complex<double>> currentFFT(fftOutputSize);
+    std::vector<std::complex<double>> referenceFFT(fftOutputSize);
 
-    for (int i = 0; i < inputSize; ++i)
-        fftInput[i] = static_cast<double>(grayImage[i]);
+    for (int i = 0; i < inputSize; ++i) currentInput[i] = static_cast<double>(lastGrayImage[i]);
+    fftw_execute_dft_r2c(fftPlan, currentInput.data(), reinterpret_cast<fftw_complex*>(currentFFT.data()));
 
-    fftw_execute(fftPlan);
+    for (int i = 0; i < inputSize; ++i) referenceInput[i] = static_cast<double>(refImage[i]);
+    fftw_execute_dft_r2c(fftPlan, referenceInput.data(), reinterpret_cast<fftw_complex*>(referenceFFT.data()));
 
-    std::vector<float> phaseSpectrum(fftOutputSize, 0.0f);
-
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < fftOutputWidth; ++x) {
-            int idx = y * fftOutputWidth + x;
-            double real = fftOutput[idx][0];
-            double imag = fftOutput[idx][1];
-            double phase = std::atan2(imag, real);
-            phaseSpectrum[idx] = static_cast<float>((phase + M_PI) / (2 * M_PI));
+    for (int i = 0; i < fftOutputSize; ++i) {
+        std::complex<double> R = currentFFT[i] * std::conj(referenceFFT[i]);
+        double mag = std::abs(R);
+        if (mag > 1e-12) {
+            fftOutput[i][0] = R.real() / mag;
+            fftOutput[i][1] = R.imag() / mag;
+        } else {
+            fftOutput[i][0] = 0.0;
+            fftOutput[i][1] = 0.0;
         }
     }
 
-    return phaseSpectrum;
+
+
+    fftw_execute(ifftPlan);
+    std::vector<float> correlation(inputSize);
+    for (int i = 0; i < inputSize; ++i) correlation[i] = static_cast<float>(ifftOutput[i] / inputSize);
+
+    return correlation;
 }
 
-
-std::vector<float> CornerDetector::computePowerSpectralDensity(const std::vector<float>& magnitudeSpectrum) {
-    std::vector<float> psd(magnitudeSpectrum.size());
-    for (size_t i = 0; i < magnitudeSpectrum.size(); ++i) {
-        psd[i] = magnitudeSpectrum[i] * magnitudeSpectrum[i];
-    }
+std::vector<float> CornerDetector::computePowerSpectralDensity() {
+    auto magSpec = computeMagnitudeSpectrum();
+    std::vector<float> psd(magSpec.size());
+    for (size_t i = 0; i < magSpec.size(); ++i)
+        psd[i] = magSpec[i] * magSpec[i];
     return psd;
 }
+void CornerDetector::setReferenceImageNoAA(const unsigned char* referenceImage, int w, int h) {
+    referenceNoAA.assign(referenceImage, referenceImage + w * h);
+    width = w;
+    height = h;
+}
 
+void CornerDetector::setReferenceImageSSAA(const unsigned char* referenceImage, int w, int h) {
+    referenceSSAA.assign(referenceImage, referenceImage + w * h);
+    width = w;
+    height = h;
+}
 std::vector<float> CornerDetector::getGuiFourierMagnitudeSpectrum() const {
     std::lock_guard<std::mutex> lock(dataMutex);
     return guiFourierMagnitudeSpectrum;
@@ -292,20 +304,20 @@ float CornerDetector::getGuiEdgeSharpness() const {
     return guiEdgeSharpness;
 }
 
-std::vector<float> CornerDetector::getMagnitudeSpectrumDescriptor(const unsigned char* img) {
-    return computeMagnitudeSpectrum(img);
-}
-
-
-std::vector<float> CornerDetector::getPhaseCorrelationDescriptor(const unsigned char* img) {
-    return computePhaseSpectrum(img);
-}
-
-
-std::vector<float> CornerDetector::getPowerSpectralDensityDescriptor(const unsigned char* img) {
-    auto magSpec = computeMagnitudeSpectrum(img);
-    return computePowerSpectralDensity(magSpec);
-}
+// std::vector<float> CornerDetector::getMagnitudeSpectrumDescriptor(const unsigned char* img) {
+//     return computeMagnitudeSpectrum(img);
+// }
+//
+//
+// std::vector<float> CornerDetector::getPhaseCorrelationDescriptor(const unsigned char* img) {
+//     return computePhaseSpectrum(img);
+// }
+//
+//
+// std::vector<float> CornerDetector::getPowerSpectralDensityDescriptor(const unsigned char* img) {
+//     auto magSpec = computeMagnitudeSpectrum(img);
+//     return computePowerSpectralDensity(magSpec);
+// }
 
 std::vector<unsigned char> CornerDetector::sobelVisualizerRGB(
     const unsigned char* grayImage,

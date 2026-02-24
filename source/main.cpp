@@ -59,6 +59,8 @@ void renderScreenQuad();
 bool detectCorners = false;
 bool fourierTransform = false;
 bool cursorEnabled = true;
+bool referenceNoAASet = false;
+
 std::mutex overlayMutex;
 vector<string> faces
 
@@ -237,6 +239,8 @@ vector<string> faces
             if (oldWidth != newWidth || oldHeight != newHeight){
                 oldWidth = newWidth;
                 oldHeight = newHeight;
+                //reset reference image used
+                referenceNoAASet = false;
                 //Resize SSAA
                 glBindTexture(GL_TEXTURE_2D, ssaaTexture);
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,oldWidth * ssaaScale,oldHeight * ssaaScale,
@@ -491,19 +495,16 @@ vector<string> faces
                     int b = pixels[3 * i + 2];
                     gray[i] = static_cast<unsigned char>(0.299f * r + 0.587f * g + 0.114f * b);
                 }
-                if (currentAA == 2) {
-                    ImageCapture::saveScreenShot(newWidth,newHeight,"SSAAScreenShot.png");
-                    cornerDetector.setReferenceImageSSAA(pixels.data(), newWidth, newHeight);
 
-                }
-                else {
-                    ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.png");
+                 //   ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.png");
+                if (!referenceNoAASet) {
                     cornerDetector.setReferenceImageNoAA(pixels.data(), newWidth, newHeight);
+                    referenceNoAASet = true;
                 }
-
                 std::thread([gray = std::move(gray), &overlay, &cornerDetector]() {
+                    AAType aaToCompare =  AAType::NoAA;
                     cornerDetector.setGrayImage(gray.data(), newWidth, newHeight);
-                    cornerDetector.prepareDataForGUI();
+                    cornerDetector.prepareDataForGUI(aaToCompare);
                     auto magSpec = cornerDetector.getGuiFourierMagnitudeSpectrum();
                     auto phaseCorr = cornerDetector.getGuiFourierPhaseCorrelation();
                     auto psd = cornerDetector.getGuiFourierPowerSpectralDensity();
@@ -513,22 +514,24 @@ vector<string> faces
                    //  cornerDetector.captureSpectrumImage(phaseCorr,"fourier_PhaseCorrelation.png");
                    //  cornerDetector.captureSpectrumImage(psd,"fourier_PowerSpectralDensity.png");
 
-
                     std::lock_guard<std::mutex> lock(overlayMutex);
                     overlay.fourierMagnitudeSpectrum = std::move(magSpec);
                     overlay.fourierPhaseCorrelation = std::move(phaseCorr);
                     overlay.fourierPowerSpectralDensity = std::move(psd);
                     overlay.edgeSharpness = edgeSharp;
 
+                    fourierTransform = false;
                     std::cerr << "Fourier transform calculations done." << std::endl;
                 }).detach();
-            } {
+            }
+            {
                 overlay.graphSize = ImVec2(1024, 480); // Change size of graph
                 std::lock_guard<std::mutex> lock(overlayMutex);
                overlay.renderGUI(cursorEnabled,currentAA, fourierTransform);
                 fourierTransform = false;
                 detectCorners = false;
             }
+
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             glfwSwapBuffers(window);
