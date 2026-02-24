@@ -33,5 +33,5 @@
 # Folders
 .idea
 cmake-build-debug
-include/assimp
-/include/
+
+
