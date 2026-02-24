@@ -13,6 +13,8 @@ namespace Textures {
         AmbientOcclusion,
         Mask,
         Unpacked,
+        Metallic,
+        Displacement,
 
     };
 
@@ -30,8 +32,8 @@ namespace Textures {
         const std::string WOODEN_BOARD_NORMAL = "../resources/textures/Wooden_Board_Fence_Normal.jpg";
         const std::string GRASS_NORMAL = "../resources/textures/Grass_normal.jpg";
         const std::string SAND_BEACH_NORMAL = "../resources/textures/sand_beach_Normal.jpg";
-        const std::string TOWER_NORMAL = "../resources/textures/Tower_normal.jpg";
-        const std::string WOOD_DOOR_NORMAL = "../resources/textures/WoodDoor_normal.jpg";
+        const std::string TOWER_NORMAL = "../resources/textures/Tower_normal.png";
+        const std::string WOOD_DOOR_NORMAL = "../resources/textures/WoodDoor_normal.png";
         const std::string TALL_GRASS_NORMAL = "../resources/textures/T_Grass_Generic_b1_NM.jpg";
     }
 
@@ -46,10 +48,15 @@ namespace Textures {
     namespace AmbientOcclusion {
         const std::string GRASS_AO = "../resources/textures/Grass_ambientocclusion.jpg";
         const std::string SAND_ALPHA = "../resources/textures/sand_beach_Alpha.jpg";
+
+
+    }
+    namespace Metallic {
         const std::string SAND_METALLIC = "../resources/textures/sand_beach_Metallic.jpg";
+    }
+    namespace Displacement {
         const std::string SAND_DISPLACEMENT = "../resources/textures/sand_beach_Displacement.jpg";
     }
-
     namespace Mask {
         const std::string GRASS_MASK = "../resources/textures/grassMask.png";
         const std::string TALL_GRASS_MASK = "../resources/textures/T_Grass_Generic_b1_OP.png";
@@ -68,6 +75,8 @@ struct MaterialTextures {
     GLuint aoID = 0;
     GLuint maskID = 0;
     GLuint unpackedID = 0;
+    GLuint metallicID = 0;
+    GLuint displacementID = 0;
 };
 
 class TextureManager {
@@ -75,22 +84,24 @@ public:
 
     static GLuint LoadTexture(const std::string& path, Textures::TextureType type = Textures::TextureType::BaseColor);
     static std::string ResolvePath(const std::string& originalPath, const std::string& fallbackDir);
-
+    static void LoadAllTextures();
     static MaterialTextures LoadMaterialTextures(
         const std::string& baseColor = "",
         const std::string& normal = "",
         const std::string& roughness = "",
         const std::string& ao = "",
         const std::string& mask = "",
-        const std::string& unpacked = ""
+        const std::string& unpacked = "",
+        const std::string& metallic = "",
+        const std::string& displacement = ""
     );
 
 
     static void Clear();
 
 private:
-    static std::unordered_map<std::string, GLuint> textures;
 
+    static std::unordered_map<std::string, GLuint> textures;
 
     static Textures::TextureType InferTextureType(const std::string& path);
 };

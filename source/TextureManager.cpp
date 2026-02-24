@@ -30,6 +30,66 @@ std::string TextureManager::ResolvePath(const std::string& originalPath, const s
 
 
 
+void TextureManager::LoadAllTextures() {
+    std::cout << "[TextureManager::LoadAllTextures] Preloading all textures..." << std::endl;
+
+
+    auto loadList = [](const std::initializer_list<std::string>& paths) {
+        for (const auto& path : paths) {
+            if (!path.empty()) {
+                GLuint texID = TextureManager::LoadTexture(path);
+                std::cout << "[TextureManager::LoadAllTextures] Loading texture " << path << std::endl;
+                if (texID == 0)
+                    std::cerr << "[TextureManager::LoadAllTextures] Failed to preload: " << path << std::endl;
+            }
+        }
+    };
+    loadList({
+        Textures::BaseColors::WOODEN_BOARD_BC,
+        Textures::BaseColors::GRASS_BC,
+        Textures::BaseColors::SAND_BEACH_BC,
+        Textures::BaseColors::T_GRASS_BC,
+        Textures::BaseColors::TOWER_BC,
+        Textures::BaseColors::WOOD_DOOR_BC
+    });
+    loadList({
+        Textures::Normals::WOODEN_BOARD_NORMAL,
+        Textures::Normals::GRASS_NORMAL,
+        Textures::Normals::SAND_BEACH_NORMAL,
+        Textures::Normals::TOWER_NORMAL,
+        Textures::Normals::WOOD_DOOR_NORMAL,
+        Textures::Normals::TALL_GRASS_NORMAL
+    });
+    loadList({
+        Textures::Roughness::WOODEN_BOARD_ROUGHNESS,
+        Textures::Roughness::GRASS_ROUGHNESS,
+        Textures::Roughness::SAND_BEACH_ROUGHNESS,
+        Textures::Roughness::TOWER_ROUGHNESS,
+        Textures::Roughness::WOOD_DOOR_ROUGHNESS
+    });
+    loadList({
+        Textures::AmbientOcclusion::GRASS_AO,
+        Textures::AmbientOcclusion::SAND_ALPHA,
+
+    });
+    loadList({
+        Textures::Metallic::SAND_METALLIC
+    });
+    loadList({
+        Textures::Displacement::SAND_DISPLACEMENT
+        });
+    loadList({
+        Textures::Mask::GRASS_MASK,
+        Textures::Mask::TALL_GRASS_MASK
+    });
+    loadList({
+        Textures::UnpackedTexture::TALL_GRASS_ORS
+    });
+}
+
+
+
+
 Textures::TextureType TextureManager::InferTextureType(const std::string& path) {
     if (path.find("_BC") != std::string::npos || path.find("BaseColor") != std::string::npos)
         return Textures::TextureType::BaseColor;
@@ -43,6 +103,10 @@ Textures::TextureType TextureManager::InferTextureType(const std::string& path) 
         return Textures::TextureType::Mask;
     if (path.find("_ORS") != std::string::npos)
         return Textures::TextureType::Unpacked;
+    if (path.find("_Metallic") != std::string::npos)
+        return Textures::TextureType::Metallic;
+    if (path.find("_Displacement") != std::string::npos)
+        return Textures::TextureType::Displacement;
 
     return Textures::TextureType::BaseColor;
 }
@@ -58,12 +122,12 @@ GLuint TextureManager::LoadTexture(const std::string& path, Textures::TextureTyp
     if (type == Textures::TextureType::BaseColor)
         type = InferTextureType(fixedPath);
 
-    std::cout << "[TextureManager] Loading texture: " << fixedPath << std::endl;
+
     int width, height, channels;
     stbi_set_flip_vertically_on_load(true);
     unsigned char* data = stbi_load(fixedPath.c_str(), &width, &height, &channels, 0);
     if (!data) {
-        std::cerr << "[TextureManager] Failed to load texture: " << fixedPath << std::endl;
+        std::cerr << "[TextureManager::LoadTexture] Failed to load texture: " << fixedPath << std::endl;
         return 0;
     }
 
@@ -73,7 +137,7 @@ GLuint TextureManager::LoadTexture(const std::string& path, Textures::TextureTyp
     else if (channels == 4) format = GL_RGBA;
     else {
         stbi_image_free(data);
-        std::cerr << "[TextureManager] Unsupported channels in texture: " << fixedPath << std::endl;
+        std::cerr << "[TextureManager::LoadTexture] Unsupported channels in texture: " << fixedPath << std::endl;
         return 0;
     }
 
@@ -104,32 +168,43 @@ MaterialTextures TextureManager::LoadMaterialTextures(
     const std::string& roughness,
     const std::string& ao,
     const std::string& mask,
-    const std::string& unpacked
+    const std::string& unpacked,
+    const std::string& metallic,
+    const std::string& displacement
 ) {
+
     MaterialTextures matTex;
     if (!baseColor.empty()) {
         matTex.baseColorID = LoadTexture(baseColor, Textures::TextureType::BaseColor);
-        if(matTex.baseColorID == 0) std::cerr << "[TextureManager] Failed to load BaseColor: " << baseColor << std::endl;
+        if(matTex.baseColorID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load BaseColor: " << baseColor << std::endl;
     }
     if (!normal.empty()) {
         matTex.normalID = LoadTexture(normal, Textures::TextureType::Normal);
-        if(matTex.normalID == 0) std::cerr << "[TextureManager] Failed to load Normal: " << normal << std::endl;
+        if(matTex.normalID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load Normal: " << normal << std::endl;
     }
     if (!roughness.empty()) {
         matTex.roughnessID = LoadTexture(roughness, Textures::TextureType::Roughness);
-        if(matTex.roughnessID == 0) std::cerr << "[TextureManager] Failed to load Roughness: " << roughness << std::endl;
+        if(matTex.roughnessID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load Roughness: " << roughness << std::endl;
     }
     if (!ao.empty()) {
         matTex.aoID = LoadTexture(ao, Textures::TextureType::AmbientOcclusion);
-        if(matTex.aoID == 0) std::cerr << "[TextureManager] Failed to load AO: " << ao << std::endl;
+        if(matTex.aoID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load AO: " << ao << std::endl;
     }
     if (!mask.empty()) {
         matTex.maskID = LoadTexture(mask, Textures::TextureType::Mask);
-        if(matTex.maskID == 0) std::cerr << "[TextureManager] Failed to load Mask: " << mask << std::endl;
+        if(matTex.maskID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load Mask: " << mask << std::endl;
     }
     if (!unpacked.empty()) {
         matTex.unpackedID = LoadTexture(unpacked, Textures::TextureType::Unpacked);
-        if(matTex.unpackedID == 0) std::cerr << "[TextureManager] Failed to load Unpacked: " << unpacked << std::endl;
+        if(matTex.unpackedID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load Unpacked: " << unpacked << std::endl;
+    }
+    if (!metallic.empty()) {
+        matTex.metallicID = LoadTexture(unpacked, Textures::TextureType::Metallic);
+        if(matTex.metallicID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load Metallic: " << unpacked << std::endl;
+    }
+    if (!displacement.empty()) {
+        matTex.displacementID = LoadTexture(unpacked, Textures::TextureType::Displacement);
+        if(matTex.displacementID == 0) std::cerr << "[TextureManager::LoadMaterialTextures] Failed to load Displacement: " << unpacked << std::endl;
     }
     return matTex;
 }

@@ -12,7 +12,13 @@ uniform vec2 jitter;
 #define FXAA_REDUCE_MIN 1.0/512.0
 #define FXAA_REDUCE_MUL 0.5
 #define FXAA_SPAN_MAX 16.0
-
+/*
+NO AA = 0
+FXAA = 1
+SSAA = 2
+MSAA = 3
+TAA = 4
+*/
 void main() {
     switch(currentAA) {
         case 0: {
@@ -43,7 +49,10 @@ void main() {
             break;
         }
         case 2: {
-            vec2 texelSize = 1.0 / screenSize;
+            FragColor = texture(screenTexture, TexCoords);
+            break;
+            //OLD
+           /* vec2 texelSize = 1.0 / screenSize;
             vec2 offsets[16] = vec2[](
             vec2(-0.375, -0.375), vec2(-0.125, -0.375), vec2(0.125, -0.375), vec2(0.375, -0.375),
             vec2(-0.375, -0.125), vec2(-0.125, -0.125), vec2(0.125, -0.125), vec2(0.375, -0.125),
@@ -56,7 +65,7 @@ void main() {
             }
             color /= 16.0;
             FragColor = vec4(color, 1.0);
-            break;
+            break;*/
         }
         case 3: {
             vec2 texelSize = 1.0 / screenSize;
@@ -81,7 +90,7 @@ void main() {
             vec2(-0.375,-0.125), vec2(-0.125,-0.125), vec2(0.125,-0.125), vec2(0.375,-0.125)
             );
             for(int i = 0; i < 8; ++i) {
-                vec2 sampleUV = TexCoords - jitters[i] / screenSize;
+                vec2 sampleUV = TexCoords + jitter - jitters[i] / screenSize;
                 accumulatedColor += pow(texture(historyTexture, sampleUV).rgb, vec3(2.2));
             }
             accumulatedColor /= 8.0;

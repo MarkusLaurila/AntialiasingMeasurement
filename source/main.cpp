@@ -131,9 +131,32 @@ vector<string> faces
 
         SHADER sceneShader ("../shader/shader.vert", "../shader/shader.frag");
         SHADER aaShader ("../shader/screenQuad.vert", "../shader/shaderAntiAliasing.frag");
+        /*
+         * Separate SSAA FBO for 16x image for comparing AA methods
+         * image with 16x detail gives more results than image without AA
+         */
+        int ssaaScale = 4;
+        GLuint ssaaFBO, ssaaTexture, ssaaRBO;
+        glGenFramebuffers(1, &ssaaFBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, ssaaFBO);
+        glGenTextures(1, &ssaaTexture);
+        glBindTexture(GL_TEXTURE_2D, ssaaTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,oldWidth * ssaaScale,oldHeight * ssaaScale,0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,ssaaTexture, 0);
+
+        glGenRenderbuffers(1, &ssaaRBO);
+        glBindRenderbuffer(GL_RENDERBUFFER, ssaaRBO);
+        glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH24_STENCIL8,oldWidth * ssaaScale,oldHeight * ssaaScale);
+
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_RENDERBUFFER,ssaaRBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
         GLuint fbo, fboTexture, rbo, historyTexture;
         glGenFramebuffers(1, &fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glViewport(0, 0,oldWidth,oldHeight);
         glGenTextures(1, &fboTexture);
         glBindTexture(GL_TEXTURE_2D, fboTexture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
@@ -211,54 +234,63 @@ vector<string> faces
             ImGui::NewFrame();
             if (!ImGui::GetIO().WantCaptureKeyboard){movement();}
             //Resize function
-            if (oldWidth != newWidth || oldHeight != newHeight) {
-    oldWidth = newWidth;
-    oldHeight = newHeight;
+            if (oldWidth != newWidth || oldHeight != newHeight){
+                oldWidth = newWidth;
+                oldHeight = newHeight;
+                //Resize SSAA
+                glBindTexture(GL_TEXTURE_2D, ssaaTexture);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,oldWidth * ssaaScale,oldHeight * ssaaScale,
+                    0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
 
-
-    glDeleteTextures(1, &fboTexture);
-    if (currentAA == 4) glDeleteTextures(1, &historyTexture);
-    glDeleteFramebuffers(1, &fbo);
-
-
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-
-    glGenTextures(1, &fboTexture);
-    glBindTexture(GL_TEXTURE_2D, fboTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, fboTexture, 0);
-    if (currentAA == 4) {
-        glGenTextures(1, &historyTexture);
-        glBindTexture(GL_TEXTURE_2D, historyTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    }
-    glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, oldWidth, oldHeight);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo);
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        std::cerr << "FBO not complete after resize!" << std::endl;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glBindRenderbuffer(GL_RENDERBUFFER, ssaaRBO);
+                glRenderbufferStorage(GL_RENDERBUFFER,
+                                      GL_DEPTH24_STENCIL8,oldWidth * ssaaScale,oldHeight * ssaaScale);
+                glDeleteTextures(1, &fboTexture);
+                glDeleteFramebuffers(1, &fbo);
+                glGenFramebuffers(1, &fbo);
+                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                glGenTextures(1, &fboTexture);
+                glBindTexture(GL_TEXTURE_2D, fboTexture);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB,oldWidth, oldHeight,
+                             0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,fboTexture, 0);
+                glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+                glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH24_STENCIL8,oldWidth, oldHeight);
+                glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_RENDERBUFFER,rbo);
+                if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                    std::cerr << "FBO not complete after resize!" << std::endl;
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                if (currentAA == 4) {
+                    glDeleteTextures(1, &historyTexture);
+                    glGenTextures(1, &historyTexture);
+                    glBindTexture(GL_TEXTURE_2D, historyTexture);
+                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                    glBindTexture(GL_TEXTURE_2D, 0);
+                }
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-
     glBindTexture(GL_TEXTURE_2D, taaTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, oldWidth, oldHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-
     Resize(window, oldWidth, oldHeight);
     cornerDetector.updateSize(oldWidth, oldHeight);
 }
-            glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            if (currentAA == 2)
+            {
+                glBindFramebuffer(GL_FRAMEBUFFER, ssaaFBO);
+                glViewport(0, 0,oldWidth * ssaaScale,oldHeight * ssaaScale);
+            }
+            else
+            {
+                glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                glViewport(0, 0,oldWidth,oldHeight);
+            }
             glEnable(GL_DEPTH_TEST);
             glClearColor(0.3f, 0.1f, 0.5f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -271,8 +303,8 @@ vector<string> faces
             frameIndex++;
             mat4 projection = perspective(radians(80.0f), static_cast<float>(oldWidth) / static_cast<float>(oldHeight), 0.01f, 1000.0f);
             if (currentAA == 4) {
-                projection[2][0] += jitterUV.x* 2.0f;
-                projection[2][1] += jitterUV.y* 2.0f;
+                projection[2][0] += jitterUV.x* 0.25f;
+                projection[2][1] += jitterUV.y* 0.25f;
             }
             glUniformMatrix4fv(locView, 1, GL_FALSE, value_ptr(view));
             glUniformMatrix4fv(locProjection, 1, GL_FALSE, value_ptr(projection));
@@ -347,13 +379,15 @@ vector<string> faces
                     break;
                 }
                 case 2: {
+                    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                    glViewport(0, 0, oldWidth, oldHeight);
+                    glDisable(GL_DEPTH_TEST);
                     aaShader.UseShader();
                     glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, fboTexture);
+                    glBindTexture(GL_TEXTURE_2D, ssaaTexture);
                     glUniform1i(locScreenTexture, 0);
-                    glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
-                    glUniform1i(locCurrentAA, 2);
-                     renderScreenQuad();
+                    glUniform1i(locCurrentAA, 0);
+                    renderScreenQuad();
                     break;
                 }
                 case 3: {
@@ -457,7 +491,12 @@ vector<string> faces
                     int b = pixels[3 * i + 2];
                     gray[i] = static_cast<unsigned char>(0.299f * r + 0.587f * g + 0.114f * b);
                 }
-                //ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.png");
+                if (currentAA == 2) {
+                    ImageCapture::saveScreenShot(newWidth,newHeight,"SSAAScreenShot.png");
+                }
+                else {
+                    ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.png");
+                }
 
                 std::thread([gray = std::move(gray), &overlay, &cornerDetector]() {
                     cornerDetector.setGrayImage(gray.data(), newWidth, newHeight);
@@ -467,7 +506,7 @@ vector<string> faces
                     auto psd = cornerDetector.getGuiFourierPowerSpectralDensity();
                     auto edgeSharp = cornerDetector.getGuiEdgeSharpness();
 
-                    //Images for paper TODO:REMOVE
+                    //Images for paper
                    //  cornerDetector.captureSpectrumImage(phaseCorr,"fourier_PhaseCorrelation.png");
                    //  cornerDetector.captureSpectrumImage(psd,"fourier_PowerSpectralDensity.png");
 
