@@ -65,12 +65,12 @@ std::mutex overlayMutex;
 vector<string> faces
 
 { //Low-res for testing  TODO:Swap to highres-skybox for images
-    "../resources/Lowres-skybox/px.png",
-    "../resources/Lowres-skybox/nx.png",
-    "../resources/Lowres-skybox/py.png",
-    "../resources/Lowres-skybox/ny.png",
-    "../resources/Lowres-skybox/pz.png",
-    "../resources/Lowres-skybox/nz.png"
+    "../resources/highres-skybox/px.png",
+    "../resources/highres-skybox/nx.png",
+    "../resources/highres-skybox/py.png",
+    "../resources/highres-skybox/ny.png",
+    "../resources/highres-skybox/pz.png",
+    "../resources/highres-skybox/nz.png"
 };
 
 
