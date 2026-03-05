@@ -349,7 +349,9 @@ vector<string> faces
 
                 mesh.Draw();
             }
-
+        /*Oparikuvia, korjaa projekti, että kääntyy freshinä, release versio githubiin, dokumentti siivota ja kuvia eri AA tekniikoiden vaikutuksesta sceneen
+           Käännösohjeet, ja controllit GUI hin ja hide controls nappi
+*/
              glDepthFunc(GL_LEQUAL);
              glDepthMask(GL_FALSE);
              skybox.Draw(view, projection);
