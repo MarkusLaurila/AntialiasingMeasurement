@@ -135,15 +135,13 @@ void OverLay::renderGUI(bool cursorEnable,int currentAA, bool fourierTransformRe
             // for (int i = 0; i < 10 && i < (int)downsampledSpec.size(); ++i)
             //     ImGui::Text("[%d] = %.3f", i, downsampledSpec[i]);
         }
-    if (!fourierTransformRequested) {
+        ImGui::Separator();
         ImGui::SeparatorText("Controls");
         ImGui::Text("1-4 to change resolution");
         ImGui::Text("5-9 to change AA method");
         ImGui::Text("C to calculate Sobel corner detection");
         ImGui::Text("F to calculate Fourier transform");
         ImGui::Text("Tab to toggle capture mouse");
-
-    }
 
     ImGui::End();
 }
