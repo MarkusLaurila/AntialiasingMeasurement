@@ -1,5 +1,6 @@
 # antialiasingdemo
 Antialiasing testing with opengl
+
 ### Controls
 
 1-4 to change resolution

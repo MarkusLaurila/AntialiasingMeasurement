@@ -15,7 +15,6 @@
 #include "CornerDetector.h"
 #include "SkyBox.h"
 #include "ModelImporter.h"
-#include <direct.h>
 
 #include "ShadowMap.h"
 using namespace std;
@@ -46,6 +45,7 @@ int newWidth, newHeight;
 int oldWidth=800, oldHeight=600;
 bool keys[1024];
 int currentAA = 0;
+int currentDebug = 0;
 int frameIndex = 0;
 float sun_Direction = 23.0f;
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
@@ -76,9 +76,6 @@ vector<string> faces
 
     int main() {
 
-        char cwd[1024];
-        _getcwd(cwd, sizeof(cwd));
-        std::cout << "\nCurrent working directory: " << cwd << std::endl;
     DISPLAY display;
     OverLay overlay;
         display.createWindow(oldWidth,oldHeight);
@@ -133,10 +130,6 @@ vector<string> faces
 
         SHADER sceneShader ("../shader/shader.vert", "../shader/shader.frag");
         SHADER aaShader ("../shader/screenQuad.vert", "../shader/shaderAntiAliasing.frag");
-        /*
-         * Separate SSAA FBO for 16x image for comparing AA methods
-         * image with 16x detail gives more results than image without AA
-         */
         int ssaaScale = 4;
         GLuint ssaaFBO, ssaaTexture, ssaaRBO;
         glGenFramebuffers(1, &ssaaFBO);
@@ -217,6 +210,7 @@ vector<string> faces
         static int locScreenTexture = glGetUniformLocation(aaShader.program, "screenTexture");
         static int locScreenSize  = glGetUniformLocation(aaShader.program, "screenSize");
         static int locCurrentAA   = glGetUniformLocation(aaShader.program, "currentAA");
+        static int locCurrentDebug = glGetUniformLocation(aaShader.program, "currentDebug");
         static int locSampleCount = glGetUniformLocation(aaShader.program, "sampleCount");
         static int locJitter      = glGetUniformLocation(aaShader.program, "jitter");
         static int locBlendFactor = glGetUniformLocation(aaShader.program, "blendFactor");
@@ -349,9 +343,6 @@ vector<string> faces
 
                 mesh.Draw();
             }
-        /*Oparikuvia, korjaa projekti, että kääntyy freshinä, release versio githubiin, dokumentti siivota ja kuvia eri AA tekniikoiden vaikutuksesta sceneen
-           Käännösohjeet, ja controllit GUI hin ja hide controls nappi
-*/
              glDepthFunc(GL_LEQUAL);
              glDepthMask(GL_FALSE);
              skybox.Draw(view, projection);
@@ -370,6 +361,7 @@ vector<string> faces
                     glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
                     glUniform1i(locCurrentAA, 0);
                     renderScreenQuad();
+                    if(detectCorners) ImageCapture::saveScreenShot(newWidth, newHeight, "NormalScreenshot.png");
 
 
                     break;
@@ -382,6 +374,7 @@ vector<string> faces
                     glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
                     glUniform1i(locCurrentAA, 1);
                     renderScreenQuad();
+                    if(detectCorners) ImageCapture::saveScreenShot(newWidth, newHeight, "FXAAScreenshot.png");
                     break;
                 }
                 case 2: {
@@ -394,6 +387,7 @@ vector<string> faces
                     glUniform1i(locScreenTexture, 0);
                     glUniform1i(locCurrentAA, 0);
                     renderScreenQuad();
+                    if(detectCorners) ImageCapture::saveScreenShot(newWidth, newHeight, "SSAAScreenshot.png");
                     break;
                 }
                 case 3: {
@@ -404,7 +398,7 @@ vector<string> faces
                     glUniform2f(locScreenSize, static_cast<float>(oldWidth), static_cast<float>(oldHeight));
                     glUniform1i(locSampleCount, 4);
                     glUniform1i(locCurrentAA, 3);
-
+                    if(detectCorners) ImageCapture::saveScreenShot(newWidth, newHeight, "MSAAScreenshot.png");
                     renderScreenQuad();
                     break;
                 }
@@ -444,7 +438,7 @@ vector<string> faces
                     glBindTexture(GL_TEXTURE_2D, taaTexture);
                     glUniform1i(locScreenTexture, 0);
                     renderScreenQuad();
-
+                    if(detectCorners) ImageCapture::saveScreenShot(newWidth, newHeight, "TAAScreenshot.png");
 
                 break;
 
@@ -462,6 +456,8 @@ vector<string> faces
 
                     break;
             }
+            glUniform1i(locCurrentDebug, currentDebug);
+
             if (detectCorners) {
                 std::vector<unsigned char> pixels(newWidth * newHeight * 3);
                 glReadPixels(0, 0, newWidth, newHeight, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
@@ -630,6 +626,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
                 case GLFW_KEY_9:
                     currentAA = 4; std::cout << "TAA enabled" << std::endl; break;
                 case GLFW_KEY_0:
+                if (currentDebug < 3)currentDebug = currentDebug + 1;
+                else currentDebug = 0;
                     break;
                 case GLFW_KEY_C:
                     detectCorners = !detectCorners;
