@@ -12,3 +12,5 @@ C to calculate Sobel corner detection
 F to calculate Fourier transform
 
 Tab to toggle capture mouse
+
+0 To change debug mode
